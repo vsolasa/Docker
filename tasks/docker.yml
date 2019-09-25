@@ -1,0 +1,41 @@
+---
+# to install docker and nvidia-docker container runtime, use the below playbook
+- name: Check for Nvidia repo
+  stat:
+    path: "/etc/yum.repos.d/nvidia-container-runtime.repo"
+  register: nvidia_file_download_status
+
+- name: Fetch NVidia docker runtime - RHEL
+  get_url:
+    url: "{{ ceph_s3_public }}/cecc-custom-public/misc/nvidia-container-runtime.repo"
+    validate_certs: false
+    dest: "/etc/yum.repos.d"
+    mode: 0755
+  register: download_repo
+  when: nvidia_file_download_status.stat.exists == False
+
+- name: Check for docker install
+  stat:
+    path: "/tmp/docker_install_completed.ansible"
+  register: docker_install_completed_status
+
+- name: Install docker
+  block:
+  - yum:
+      name:
+        - nvidia-container-runtime-hook
+        - docker
+      state: present
+    register: inst_docker
+  - name: Enable and start docker services
+    service:
+      name: docker
+      state: restarted
+      enabled: yes
+    when: inst_docker.changed
+  - name: Create Docker install Passover file
+    copy:
+      dest: "/tmp/docker_install_completed.ansible"
+      content: |
+         completed
+  when: docker_install_completed_status.stat.exists == False
